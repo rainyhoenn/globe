@@ -74,39 +74,76 @@ echo "Starting backend server..."
 bun run serve &
 SERVE_PID=$!
 
-# Give backend time to start
-sleep 2
-
 # Start frontend server in background  
 echo "Starting frontend server..."
 bun run dev &
 DEV_PID=$!
 
-# Wait for servers to initialize
-sleep 5
-
-# Try to open browser if available
-if command -v open &> /dev/null; then
-    echo "Opening browser..."
-    open http://localhost:8080 2>/dev/null || true
-fi
+# Function to check if server is responding
+check_server() {
+    local url=$1
+    local name=$2
+    
+    for i in {1..30}; do
+        if curl -s "$url" > /dev/null 2>&1; then
+            echo "✅ $name is running"
+            return 0
+        fi
+        echo "Checking $name... ($i/30)"
+        sleep 2
+    done
+    echo "❌ $name failed to start after 60 seconds"
+    return 1
+}
 
 echo ""
-echo "✅ Servers are running!"
-echo ""
-echo "Press Ctrl+C to stop the servers, or close this window."
-echo ""
+echo "Waiting for servers to start..."
 
-# Keep the script running and wait for user input or termination
-while true; do
-    sleep 1
-    # Check if background processes are still running
-    if ! kill -0 $SERVE_PID 2>/dev/null || ! kill -0 $DEV_PID 2>/dev/null; then
-        echo "One or more servers have stopped unexpectedly."
-        echo "Check the output above for any error messages."
+# Check backend server
+if check_server "http://localhost:4000/api/products" "Backend server"; then
+    # Check frontend server
+    if check_server "http://localhost:8080" "Frontend server"; then
         echo ""
-        echo "Press any key to exit..."
-        read -n 1 -s
+        echo "🌐 Opening browser..."
+        
+        # Try different browser opening methods based on OS
+        if command -v open &> /dev/null; then
+            # macOS
+            open http://localhost:8080 2>/dev/null
+        elif command -v xdg-open &> /dev/null; then
+            # Linux
+            xdg-open http://localhost:8080 2>/dev/null
+        elif command -v start &> /dev/null; then
+            # Windows (if running in Git Bash or similar)
+            start http://localhost:8080 2>/dev/null
+        else
+            echo "Could not auto-open browser. Please open: http://localhost:8080"
+        fi
+        
+        echo ""
+        echo "✅ All servers are running and browser opened!"
+        echo ""
+        echo "Press Ctrl+C to stop the servers, or close this window."
+        echo ""
+        
+        # Keep the script running and wait for user input or termination
+        while true; do
+            sleep 1
+            # Check if background processes are still running
+            if ! kill -0 $SERVE_PID 2>/dev/null || ! kill -0 $DEV_PID 2>/dev/null; then
+                echo "One or more servers have stopped unexpectedly."
+                echo "Check the output above for any error messages."
+                echo ""
+                echo "Press any key to exit..."
+                read -n 1 -s
+                exit 1
+            fi
+        done
+    else
+        echo "Frontend server failed to start. Exiting..."
         exit 1
     fi
-done
+else
+    echo "Backend server failed to start. Exiting..."
+    exit 1
+fi
