@@ -26,7 +26,12 @@ if exist "bun.lockb" (
 
 echo.
 echo Step 2: Clearing Bun caches...
-bun pm cache rm 2>nul || echo Cache clearing attempted
+bun pm cache rm 2>nul
+if %errorlevel% neq 0 (
+    echo Cache clearing had issues, but continuing...
+) else (
+    echo Cache cleared successfully
+)
 
 echo.
 echo Step 3: Fresh installation with force flag...

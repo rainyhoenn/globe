@@ -64,7 +64,13 @@ if "%NEEDS_SETUP%"=="1" (
     echo.
     echo Ensuring Windows compatibility...
     REM Clear any Bun caches that might cause issues on Windows
-    bun pm cache rm 2>nul || echo Cache clear attempted
+    echo Clearing Bun cache...
+    bun pm cache rm 2>nul
+    if %errorlevel% neq 0 (
+        echo Cache clear had issues, but continuing...
+    ) else (
+        echo Cache cleared successfully
+    )
     
     REM Reinstall to fix any Windows-specific module resolution issues
     echo Reinstalling dependencies for Windows compatibility...
@@ -102,8 +108,11 @@ echo.
 echo To stop the servers, close this window or press Ctrl+C
 echo.
 
-REM Start servers in background and check if they're running
-start /b cmd /c "bun run start"
+REM Start servers and monitor them
+echo Starting servers...
+start /min "Globe-ERP-Servers" cmd /k "bun run start"
+REM Give servers time to initialize
+timeout /t 3 /nobreak >nul
 
 REM Wait for servers to start and check if they're responding
 echo Waiting for servers to start...
@@ -116,7 +125,7 @@ if %attempts% gtr 30 (
 )
 
 REM Check if backend server is responding
-curl -s http://localhost:4000/api/products >nul 2>nul
+powershell -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:4000/api/products' -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>nul
 if %errorlevel% equ 0 (
     echo ✅ Backend server is running
     goto :check_frontend
@@ -128,7 +137,7 @@ if %errorlevel% equ 0 (
 
 :check_frontend
 REM Check if frontend is responding
-curl -s http://localhost:8080 >nul 2>nul
+powershell -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:8080' -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>nul
 if %errorlevel% equ 0 (
     echo ✅ Frontend server is running
     echo.
@@ -154,29 +163,16 @@ goto :end
 :servers_ready
 echo.
 echo ✅ All servers are running and browser opened!
-echo Press Ctrl+C to stop the servers, or close this window.
 echo.
-REM Wait for user to stop the servers
-:wait_loop
-timeout /t 5 /nobreak >nul 2>nul
-if not defined _exit goto :wait_loop
-goto :cleanup
+echo The servers are running in a separate window titled "Globe-ERP-Servers"
+echo To stop the servers: Close that window or press Ctrl+C in it
+echo.
+echo This window will now close. The application will continue running
+echo in the background until you stop the server window.
+echo.
+timeout /t 5 /nobreak >nul
+goto :end
 
-:cleanup
-echo.
-echo Cleaning up any remaining background processes...
-REM Kill processes on specific ports used by this application
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":4000" ^| find "LISTENING" 2^>nul') do (
-    taskkill /f /pid %%a >nul 2>nul
-)
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":8080" ^| find "LISTENING" 2^>nul') do (
-    taskkill /f /pid %%a >nul 2>nul
-)
-REM Wait a moment for cleanup
-timeout /t 1 /nobreak >nul 2>nul
-echo.
-echo ✅ Application has been stopped.
-echo.
 
 :end
 echo Press any key to exit...
