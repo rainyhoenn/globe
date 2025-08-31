@@ -18,8 +18,20 @@ if %errorlevel% neq 0 (
     goto :end
 )
 
-REM Check if node_modules exists, if not, run setup
+REM Check if node_modules exists and if it's properly configured
 if not exist "node_modules" (
+    set NEEDS_SETUP=1
+) else (
+    REM Check if core dependencies exist
+    if not exist "node_modules\express" (
+        echo Detected incomplete installation, running setup...
+        set NEEDS_SETUP=1
+    ) else (
+        set NEEDS_SETUP=0
+    )
+)
+
+if "%NEEDS_SETUP%"=="1" (
     echo First time setup detected. Running initial setup...
     echo.
     
@@ -47,6 +59,33 @@ if not exist "node_modules" (
         echo Press any key to exit...
         pause > nul
         goto :end
+    )
+    
+    echo.
+    echo Ensuring Windows compatibility...
+    REM Clear any Bun caches that might cause issues on Windows
+    bun pm cache rm 2>nul || echo Cache clear attempted
+    
+    REM Reinstall to fix any Windows-specific module resolution issues
+    echo Reinstalling dependencies for Windows compatibility...
+    bun install --force
+    
+    if %errorlevel% neq 0 (
+        echo Warning: Force reinstall had issues, but continuing...
+    )
+    
+    REM Create a quick verification that key modules are accessible
+    echo Verifying installation...
+    if exist "node_modules\express" (
+        echo ✅ Express found
+    ) else (
+        echo ❌ Express missing - this may cause server startup issues
+    )
+    
+    if exist "node_modules\postcss" (
+        echo ✅ PostCSS found
+    ) else (
+        echo ❌ PostCSS missing - this may cause build issues
     )
     
     echo.
@@ -104,6 +143,11 @@ if %errorlevel% equ 0 (
 
 :run_normally
 echo Running servers normally...
+echo.
+echo If you encounter module resolution errors, try:
+echo 1. Delete node_modules folder and run this script again
+echo 2. Or run: bun install --force
+echo.
 bun run start
 goto :end
 
